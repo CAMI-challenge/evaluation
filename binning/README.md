@@ -1,8 +1,8 @@
 ####The procedure is as follows:
 
-a. tax-rankify: Convert taxonomic IDs to class identifiers at specified taxonomic levels.
-b. confusion-matrix: Convert label and prediction file into a confusion matrix.
-c. cmat2XXX: do things with the confusion matrices.
+1. tax-rankify: Convert taxonomic IDs to class identifiers at specified taxonomic levels.
+2. confusion-matrix: Convert label and prediction file into a confusion matrix.
+3. cmat2XXX: do things with the confusion matrices.
 
 Example:
 
