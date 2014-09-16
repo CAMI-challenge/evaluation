@@ -24,4 +24,5 @@ cmat2stat < data.cmat
 ```
 
 If you are comparing non-taxonomic binning classes, step a can be skipped.
+
 Questions: johannes.droege@uni-duesseldorf.de
