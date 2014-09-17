@@ -4,18 +4,30 @@ CAMI IO
 import re
 
 
+# Global constants
+COMMENT_CHAR = '#'
+HEADER_CHAR = '@'
+FIELD_SEP = '\t'
+TASK_KEY = 'task'
+VERSION_KEY = 'version'
+HEADER_SEP = ':'
+
+
+class Writer(object):
+
+
+    def __init__(self):
+        pass
+
+
+    def writerow(self, row):
+        pass
+
+
 class Reader(object):
 
-    # TODO externalize in abstact class
-    __comment_char = '#'
-    __header_char = '@'
-    __field_sep = '\t'
-    __task_key = 'task'
-    __version_key = 'version'
-    __header_sep = ':'
-
-    # TODO externalise supports in abstract class but initialize in concrete class
-    __supports = {__task_key: ['binning'], __version_key: ['1.0']}
+    # define header fields which are mandatory
+    __supports = {TASK_KEY: ['binning'], VERSION_KEY: ['1.0']}
 
     #
     # Test for a blank line
@@ -29,16 +41,18 @@ class Reader(object):
     #
     @staticmethod
     def _is_comment(line):
-        return line.startswith(Reader.__comment_char)
+        return line.startswith(COMMENT_CHAR)
 
     def __init__(self, filename):
         self.line_number = 0
         self.version_value = None
         self.filename = filename
         self.file_handle = open(filename, 'r')
+        # TODO casting header information values, such as T => True.
         self.header_info = {}
         self.columns = []
         self._read_header()
+
 
     def __iter__(self):
         return self
@@ -47,9 +61,9 @@ class Reader(object):
     # Check if manadatory fields in header have been set.
     #
     def _check_mandatory_set(self):
-        if self.__task_key not in self.header_info:
+        if TASK_KEY not in self.header_info:
             raise HeaderError('format version not declared')
-        if self.__version_key not in self.header_info:
+        if VERSION_KEY not in self.header_info:
             raise HeaderError('task type not declared')
 
     #
@@ -67,11 +81,11 @@ class Reader(object):
     def _header_parse(self, line):
 
         # header line is sufficiently long and potentially contains a key/value pair
-        if len(line) < 4 or line.count(':') != 1:
+        if len(line) < 4 or line.count(HEADER_SEP) != 1:
             raise HeaderError('malformed header line:{0}'.format(line))
 
         # split key and value, test-data for basic validity
-        key, value = [l.lower() for l in line[1:].split(Reader.__header_sep)]
+        key, value = [l.lower() for l in line[1:].split(HEADER_SEP)]
         if len(key) <= 0:
             raise HeaderError('header does not appear to contain a key. line:{0} [{1}]'.format(self.line_number, line))
         elif len(value) <= 0:
@@ -105,16 +119,22 @@ class Reader(object):
                 continue
 
             # column definitions line, which marks the end of the header
-            elif line.startswith(Reader.__header_char * 2):
-                self.columns = line[2:].split(Reader.__field_sep)
+            elif line.startswith(HEADER_CHAR * 2):
+                self.columns = line[2:].split(FIELD_SEP)
                 break
 
             # skip header lines, but test-data for validity
-            elif line.startswith(Reader.__header_char):
+            elif line.startswith(HEADER_CHAR):
                 self._header_parse(line)
 
         # Check that task and version are set within header
         self._check_mandatory_set()
+
+    #
+    # Close underlying input file
+    #
+    def close(self):
+        self.file_handle.close()
 
     #
     # Read next line
@@ -128,11 +148,18 @@ class Reader(object):
         if Reader._is_blank(line) or Reader._is_comment(line):
             return self.next()
 
-        values = line.split(Reader.__field_sep)
+        values = line.split(FIELD_SEP)
         if len(values) != len(self.columns):
             raise FieldError('incorrect number of fields for line:{0} [{1}]'.format(self.line_number, line))
 
         return values
+
+    #
+    # Get header based information.
+    #
+    def get_info(self, key):
+        return self.header_info[key]
+
 
 #
 # Local exception classes
