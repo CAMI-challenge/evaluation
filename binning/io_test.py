@@ -2,7 +2,7 @@ import unittest
 from io import *
 
 
-class TestIO(unittest.TestCase):
+class TestRead(unittest.TestCase):
 
     def test_empty_file(self):
         with self.assertRaises(BinningError):
@@ -49,4 +49,31 @@ class TestIO(unittest.TestCase):
         self.assertEqual(5, len([r for r in reader]))
 
 
-# TODO finish enumerate various tests.
+class TestWrite(unittest.TestCase):
+
+    def setUp(self):
+        reader = Reader('test-data/valid.txt')
+        self.rows = []
+        for r in reader:
+            self.rows.append(r)
+        reader.close()
+
+    def test_write_file(self):
+        writer = Writer('test-data/delete.txt', overwrite=True)
+        for r in self.rows:
+            writer.writerow(r)
+        writer.close()
+
+    def test_no_overwrite(self):
+        with self.assertRaises(BinningError):
+            Writer('test-data/delete.txt', overwrite=False)
+
+    def test_uknown_header(self):
+        with self.assertRaises(HeaderError):
+            writer = Writer('test-data/delete.txt', overwrite=True)
+            writer._set_headinfo('foo','bar')
+
+    def test_bad_field_number(self):
+        with self.assertRaises(FieldError):
+            writer = Writer('test-data/delete.txt', overwrite=True)
+            writer.writerow([1,2,3,4])

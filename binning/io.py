@@ -1,27 +1,101 @@
 """
 CAMI IO
 """
+import os.path
 import re
-
 
 # Global constants
 COMMENT_CHAR = '#'
 HEADER_CHAR = '@'
 FIELD_SEP = '\t'
-TASK_KEY = 'task'
-VERSION_KEY = 'version'
 HEADER_SEP = ':'
 
+# Header keys
+TASK_KEY = 'task'
+VERSION_KEY = 'version'
+CONID_KEY = 'contestantid'
+SAMPLEID_KEY = 'sampleid'
+REFBASED_KEY = 'referencebased'
+ASMBASED_KEY = 'assemblybased'
+REPINFO_KEY = 'replicateinfo'
 
 class Writer(object):
 
+    __columns = ['SEQUENCEID', 'BINID', 'TAXID']
 
-    def __init__(self):
-        pass
+    def __init__(self, filename, overwrite=False):
+        self.header_info = {
+            'task': 'binning',
+            'version': 1.0,
+            'contestantid': '',
+            'sampleid': '',
+            'referencebased': 'F',
+            'assemblybased': 'F',
+            'replicateinfo': 'F'
+        }
+        if not overwrite and os.path.exists(filename):
+            raise BinningError('output file {0} already exists'.format(filename))
+        self.file_handle = open(filename, 'w')
+        self._write_header()
+
+    #
+    # Helper function to set internal dictionary fields on header info
+    #
+    def _set_headinfo(self, key, value):
+        if key not in self.header_info:
+            raise HeaderError('unknown header info field {0}'.format(key))
+        self.header_info[key] = value
+
+    #
+    # Public methods for setting various header fields.
+    #
+    # version and task are not exposed to users.
+    #
+    def set_contestantid(self, contestant):
+        self._set_headinfo(CONID_KEY, contestant)
+
+    def set_sampleid(self, sample):
+        self._set_headinfo(SAMPLEID_KEY, sample)
+
+    def set_reference_based(self):
+        self._set_headinfo(REFBASED_KEY, 'T')
+
+    def set_assembly_based(self):
+        self._set_headinfo(ASMBASED_KEY, 'T')
+
+    def set_replicate_info(self):
+        self._set_headinfo(REPINFO_KEY, 'T')
 
 
+    #
+    # Write a line with implicit newline
+    #
+    def _writeline(self, line):
+        self.file_handle.write(line + '\n')
+
+    #
+    # Write the header record
+    #
+    def _write_header(self):
+        self._writeline('#CAMI Format for Binning')
+        for k, v in self.header_info.iteritems():
+            self._writeline('@{0}{1}{2}'.format(k, HEADER_SEP, v))
+        self._writeline('@@{0}'.format(FIELD_SEP.join(Writer.__columns)))
+
+    #
+    # Write a single row
+    #
     def writerow(self, row):
+        if len(row) != len(Writer.__columns):
+            raise FieldError('number of fields {0} does not agree with columns'.format(row, Writer.__columns))
+        self._writeline(FIELD_SEP.join(row))
         pass
+
+    #
+    # Close underlying file
+    #
+    def close(self):
+        self.file_handle.close()
 
 
 class Reader(object):
@@ -183,14 +257,22 @@ if __name__ == '__main__':
     import sys
 
     try:
-        if len(sys.argv) != 2:
-            print 'usage: [cami tax binning file]'
+        if len(sys.argv) != 3:
+            print 'usage: [input file] [output file]'
             sys.exit(1)
 
         reader = Reader(sys.argv[1])
         print reader.columns
+        data_rows = []
         for row in reader:
             print row
+            data_rows.append(row)
+        reader.close()
+
+        writer = Writer(sys.argv[2])
+        for row in data_rows:
+            writer.writerow(row)
+        writer.close()
 
     except IOError as e:
         print e
