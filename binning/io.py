@@ -34,17 +34,30 @@ import re
 HEADER_COMMENT = '#CAMI Format for Binning'
 COMMENT_CHAR = '#'
 HEADER_CHAR = '@'
-FIELD_SEP = '\t'
+DELIMITER = '\t'
 HEADER_SEP = ':'
 
-# Header keys
+# Generic keys
 TASK_KEY = 'task'
 VERSION_KEY = 'version'
 CONID_KEY = 'contestantid'
 SAMPLEID_KEY = 'sampleid'
+
+# Binning constants
+BIN_TASK = 'binning'
+BIN_VERSION_SUPPORT = ['1.0']
 REFBASED_KEY = 'referencebased'
 ASMBASED_KEY = 'assemblybased'
 REPINFO_KEY = 'replicateinfo'
+BIN_COLUMN_DEFINITION = ['SEQUENCEID', 'TAXID', 'BINID']
+BIN_MANDATORY_FIELDS = [REFBASED_KEY, ASMBASED_KEY, REPINFO_KEY]
+
+# Profile constants
+PRO_TASK = 'profiling'
+PRO_VERSION_SUPPORT = ['1.0']
+RANKS_KEY = 'ranks'
+PRO_COLUMN_DEFINITION = ['TAXID', 'RANK', 'TAXPATH', 'TAXPATH_SN', 'PERCENTAGE']
+PRO_MANDATORY_FIELDS = [RANKS_KEY]
 
 
 class Writer(object):
@@ -54,7 +67,6 @@ class Writer(object):
     Opens a file on instantiation and validates header information. Provides iterator
     access to each subsequent data line, returned as a list of values.
     """
-    __columns = ['SEQUENCEID', 'BINID', 'TAXID']
 
     def __enter__(self):
         """
@@ -68,24 +80,26 @@ class Writer(object):
         """
         self.close()
 
-    def __init__(self, filename, overwrite=False):
+    def __init__(self, filename, additional_header_info, column_definition, overwrite=False):
         """
         Instatiate the Writer class for a given filename.
         :param filename: the filename to write
+        :param additional_header_info: addition header fields for a concrete class
+        :param column_definition: columns defined for a concrete class
         :param overwrite: boolean flag for file overwriting
         :raises: BinningError when output file already exists and overwrite is False
         """
         self.header_info = {
-            'task': 'binning',
-            'version': 1.0,
-            'contestantid': '',
-            'sampleid': '',
-            'referencebased': 'F',
-            'assemblybased': 'F',
-            'replicateinfo': 'F'
+            TASK_KEY: '',
+            VERSION_KEY: '',
+            CONID_KEY: '',
+            SAMPLEID_KEY: ''
         }
+        self.header_info.update(additional_header_info)
+        self.column_definition = column_definition
+
         if not overwrite and os.path.exists(filename):
-            raise BinningError('output file {0} already exists'.format(filename))
+            raise ParseError('output file {0} already exists'.format(filename))
         self.file_handle = open(filename, 'w')
         self._write_header()
 
@@ -113,24 +127,6 @@ class Writer(object):
         """
         self._set_headinfo(SAMPLEID_KEY, sample)
 
-    def set_reference_based(self):
-        """
-        Set reference based to true
-        """
-        self._set_headinfo(REFBASED_KEY, 'T')
-
-    def set_assembly_based(self):
-        """
-        Set assembly based to true
-        """
-        self._set_headinfo(ASMBASED_KEY, 'T')
-
-    def set_replicate_info(self):
-        """
-        Set replicate info to true
-        """
-        self._set_headinfo(REPINFO_KEY, 'T')
-
     def _writeline(self, line):
         """
         Write a single line to the file
@@ -144,8 +140,8 @@ class Writer(object):
         """
         self._writeline(HEADER_COMMENT)
         for k, v in self.header_info.iteritems():
-            self._writeline('@{0}{1}{2}'.format(k, HEADER_SEP, v))
-        self._writeline('@@{0}'.format(FIELD_SEP.join(Writer.__columns)))
+            self._writeline('{0}{1}{2}{3}'.format(HEADER_CHAR, k, HEADER_SEP, v))
+        self._writeline('{0}{1}'.format(HEADER_CHAR*2, DELIMITER.join(self.column_definition)))
 
     def writerow(self, row):
         """
@@ -153,9 +149,9 @@ class Writer(object):
         :param row: the row of values, corresponding to the column order.
         :raises FieldError when the number of fields does not agree with the defined number of columns
         """
-        if len(row) != len(Writer.__columns):
-            raise FieldError('number of fields {0} does not agree with columns'.format(row, Writer.__columns))
-        self._writeline(FIELD_SEP.join(row))
+        if len(row) != len(self.column_definition):
+            raise FieldError('number of fields {0} does not agree with columns'.format(row, self.column_definition))
+        self._writeline(DELIMITER.join(row))
         pass
 
     def close(self):
@@ -163,6 +159,7 @@ class Writer(object):
         Close the underlying file
         """
         self.file_handle.close()
+
 
 
 class Reader(object):
@@ -173,10 +170,6 @@ class Reader(object):
     where each row is returned as a list of values ordered by column definition.
 
     """
-
-    # define header fields which are mandatory
-    # TODO determine which fields in the header are mandatory beyond task and version
-    __supports = {TASK_KEY: ['binning'], VERSION_KEY: ['1.0']}
 
     @staticmethod
     def _is_blank(line):
@@ -204,7 +197,7 @@ class Reader(object):
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
-    def __init__(self, filename):
+    def __init__(self, filename, task_name, version_support, mandatory_header_fields, column_definition):
         """
         Instantiate a Reader. The parser will open and read the header
         as part of instantiation.
@@ -218,7 +211,9 @@ class Reader(object):
         self.file_handle = open(filename, 'r')
         # TODO casting header information values, such as T => True.
         self.header_info = {}
-        self.columns = []
+        self.supports = {TASK_KEY: [task_name], VERSION_KEY: version_support}
+        self.column_definition = column_definition
+        self.mandatory_header_fields = [TASK_KEY, VERSION_KEY, CONID_KEY, SAMPLEID_KEY] + mandatory_header_fields
         self._read_header()
 
 
@@ -233,10 +228,10 @@ class Reader(object):
         Check if the mandatory header fields have been included.
         :return: returns True if mandatory fields are found
         """
-        if TASK_KEY not in self.header_info:
-            raise HeaderError('format version not declared')
-        if VERSION_KEY not in self.header_info:
-            raise HeaderError('task type not declared')
+        for mf in self.mandatory_header_fields:
+            if mf not in self.header_info:
+                raise HeaderError('mandatory header field {0} was not found'.format(mf))
+
 
     def _readline(self):
         """
@@ -270,7 +265,7 @@ class Reader(object):
         self.header_info[key] = value
 
         # test-data each header definition type is supported
-        for k, v in Reader.__supports.iteritems():
+        for k, v in self.supports.iteritems():
             if key == k and value not in v:
                 # TODO add explanation of what _is_ supported
                 raise HeaderError('reader does not support the file type definition. line:{0} [{1}]'
@@ -293,7 +288,10 @@ class Reader(object):
 
             # column definitions line, which marks the end of the header
             elif line.startswith(HEADER_CHAR * 2):
-                self.columns = line[2:].split(FIELD_SEP)
+                cols = line[2:].split(DELIMITER)
+                if cols != self.column_definition:
+                    raise HeaderError('column definition incorrect at line:{0} {1} '
+                                      'should be {2}'.format(self.line_number, line, self.column_definition))
                 break
 
             # skip header lines, but test-data for validity
@@ -322,8 +320,8 @@ class Reader(object):
         if Reader._is_blank(line) or Reader._is_comment(line):
             return self.next()
 
-        values = line.split(FIELD_SEP)
-        if len(values) != len(self.columns):
+        values = line.split(DELIMITER)
+        if len(values) != len(self.column_definition):
             raise FieldError('incorrect number of fields for line:{0} [{1}]'.format(self.line_number, line))
 
         return values
@@ -345,21 +343,98 @@ class Reader(object):
             print >> handle, '{0}={1}'.format(k, v)
 
 
-class BinningError(IOError):
+#
+#  BINNING IO
+#
+
+class BinningWriter(Writer):
+    """
+    Concrete class for CAMI binning format.
+    """
+
+    def __init__(self, filename, overwrite=False):
+
+        binning_header_info = {
+            TASK_KEY: BIN_TASK,
+            VERSION_KEY: 1.0,
+            REFBASED_KEY: 'F',
+            ASMBASED_KEY: 'F',
+            REPINFO_KEY: 'F'
+        }
+
+        super(BinningWriter, self).__init__(
+            filename, binning_header_info, BIN_COLUMN_DEFINITION, overwrite)
+
+    def set_reference_based(self):
+        """
+        Set reference based to true
+        """
+        self._set_headinfo(REFBASED_KEY, 'T')
+
+    def set_assembly_based(self):
+        """
+        Set assembly based to true
+        """
+        self._set_headinfo(ASMBASED_KEY, 'T')
+
+    def set_replicate_info(self):
+        """
+        Set replicate info to true
+        """
+        self._set_headinfo(REPINFO_KEY, 'T')
+
+
+class BinningReader(Reader):
+    """
+    Concrete class for reading CAMI binning format
+    """
+    def __init__(self, filename):
+        super(BinningReader, self).__init__(
+            filename, BIN_TASK, BIN_VERSION_SUPPORT, BIN_MANDATORY_FIELDS, BIN_COLUMN_DEFINITION)
+
+
+#
+# PROFILE IO
+#
+
+class ProfileWriter(Writer):
+    """
+    Concreate class for writing CAMI profiling format.
+    """
+    def __init__(self, filename, overwrite=False):
+
+        profiling_header_info = {
+            TASK_KEY: PRO_TASK,
+            VERSION_KEY: 1.0,
+            RANKS_KEY: 'superkingdom|phylum|class|order|family|genus|species|strain'
+        }
+
+        super(ProfileWriter, self).__init__(
+            filename, profiling_header_info, PRO_COLUMN_DEFINITION, overwrite)
+
+class ProfileReader(Reader):
+    """
+    Concrete class for reading CAMI profiling format
+    """
+    def __init__(self, filename):
+        super(ProfileReader, self).__init__(
+            filename, PRO_TASK, PRO_VERSION_SUPPORT, PRO_MANDATORY_FIELDS, PRO_COLUMN_DEFINITION)
+
+class ParseError(IOError):
     """
     Base error class
     """
     pass
 
 
-class FieldError(BinningError):
+class FieldError(ParseError):
     """
     Data field errors
     """
     pass
 
 
-class HeaderError(BinningError):
+class HeaderError(ParseError):
     """
     Header errors
     """
@@ -378,17 +453,27 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     try:
-        with Reader(args.input_file) as reader:
+        with BinningReader(args.input_file) as reader:
                 print 'Header information:'
                 reader.print_headerinfo(sys.stderr)
                 print
                 print 'Data fields:'
-                print >> sys.stderr, reader.columns
+                print >> sys.stderr, reader.column_definition
+                mr = []
                 for nrow, row in enumerate(reader, start=1):
                     print >> sys.stderr, row
+                    mr.append(row)
                 print
                 print 'Read {0} data rows, check that this is correct.'.format(nrow)
                 print 'Validation finished without error.'
+
+                #
+                # DELETE THIS
+                #
+                with BinningWriter('junkme.out') as writer:
+                    for r in mr:
+                        writer.writerow(r)
+
     except IOError as e:
         print 'There was an error during validation'
         print 'Exception: {0}'.format(e)

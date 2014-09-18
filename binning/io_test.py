@@ -2,78 +2,115 @@ import unittest
 from io import *
 
 
-class TestRead(unittest.TestCase):
+class TestBinningRead(unittest.TestCase):
 
     def test_empty_file(self):
-        with self.assertRaises(BinningError):
-            Reader('test-data/empty.txt')
+        with self.assertRaises(ParseError):
+            BinningReader('test-data/binning-empty.txt')
+        with self.assertRaises(ParseError):
+            ProfileReader('test-data/profile-empty.txt')
 
     def test_missing_task(self):
         with self.assertRaises(HeaderError):
-            Reader('test-data/no-task.txt')
+            BinningReader('test-data/binning-no-task.txt')
+        with self.assertRaises(HeaderError):
+            ProfileReader('test-data/profile-no-task.txt')
 
     def test_duplicate_key(self):
         with self.assertRaises(HeaderError):
-            Reader('test-data/dup-key.txt')
+            BinningReader('test-data/dup-key.txt')
 
     def test_missing_key(self):
         with self.assertRaises(HeaderError):
-            Reader('test-data/missing-key.txt')
+            BinningReader('test-data/missing-key.txt')
 
     def test_missing_value(self):
         with self.assertRaises(HeaderError):
-            Reader('test-data/missing-val.txt')
+            BinningReader('test-data/missing-val.txt')
 
     def test_missing_version(self):
         with self.assertRaises(HeaderError):
-            Reader('test-data/no-ver.txt')
+            BinningReader('test-data/binning-no-ver.txt')
+        with self.assertRaises(HeaderError):
+            ProfileReader('test-data/profile-no-ver.txt')
 
     def test_no_column_def(self):
         with self.assertRaises(HeaderError):
-            Reader('test-data/no-coldef.txt')
+            BinningReader('test-data/binning-no-coldef.txt')
+        with self.assertRaises(HeaderError):
+            ProfileReader('test-data/profile-no-coldef.txt')
 
     def test_unknown_task(self):
         with self.assertRaises(HeaderError):
-            Reader('test-data/unk-task.txt')
+            BinningReader('test-data/binning-unk-task.txt')
+        with self.assertRaises(HeaderError):
+            ProfileReader('test-data/profile-unk-task.txt')
 
     def test_unknown_version(self):
         with self.assertRaises(HeaderError):
-            Reader('test-data/unk-ver.txt')
+            BinningReader('test-data/binning-unk-ver.txt')
+        with self.assertRaises(HeaderError):
+            ProfileReader('test-data/profile-unk-ver.txt')
 
-    def test_bad_number_fields(self):
+    def test_bad_row(self):
         with self.assertRaises(FieldError):
-            [r for r in Reader('test-data/bad-field.txt')]
+            [r for r in BinningReader('test-data/binning-bad-row.txt')]
+            [r for r in ProfileReader('test-data/profile-bad-row.txt')]
+
 
     def test_valid_file(self):
-        reader = Reader('test-data/valid.txt')
+        reader = BinningReader('test-data/binning-valid.txt')
         self.assertEqual(5, len([r for r in reader]))
 
+        reader = ProfileReader('test-data/profile-valid.txt')
+        self.assertEqual(12, len([r for r in reader]))
 
-class TestWrite(unittest.TestCase):
+
+class TestBinningWrite(unittest.TestCase):
 
     def setUp(self):
-        reader = Reader('test-data/valid.txt')
-        self.rows = []
-        for r in reader:
-            self.rows.append(r)
-        reader.close()
+
+        self.bin_rows = []
+        self.pro_rows = []
+
+        with BinningReader('test-data/binning-valid.txt') as reader:
+            for r in reader:
+                self.bin_rows.append(r)
+
+        with ProfileReader('test-data/profile-valid.txt') as reader:
+            for r in reader:
+                self.pro_rows.append(r)
 
     def test_write_file(self):
-        writer = Writer('test-data/delete.txt', overwrite=True)
-        for r in self.rows:
-            writer.writerow(r)
-        writer.close()
+        with BinningWriter('test-data/binning-delete.txt', overwrite=True) as writer:
+            for r in self.bin_rows:
+                writer.writerow(r)
+
+        with ProfileWriter('test-data/profile-delete.txt', overwrite=True) as writer:
+            for r in self.pro_rows:
+                writer.writerow(r)
 
     def test_no_overwrite(self):
-        with self.assertRaises(BinningError):
-            Writer('test-data/delete.txt', overwrite=False)
+        with self.assertRaises(ParseError):
+            BinningWriter('test-data/binning-delete.txt', overwrite=False)
 
-    def test_uknown_header(self):
+        with self.assertRaises(ParseError):
+            ProfileWriter('test-data/profile-delete.txt', overwrite=False)
+
+    def test_unknown_header(self):
         with self.assertRaises(HeaderError):
-            writer = Writer('test-data/delete.txt', overwrite=True)
-            writer._set_headinfo('foo','bar')
+            with BinningWriter('test-data/binning-delete.txt', overwrite=True) as writer:
+                writer._set_headinfo('foo', 'bar')
+
+        with self.assertRaises(HeaderError):
+            with ProfileWriter('test-data/profile-delete.txt', overwrite=True) as writer:
+                writer._set_headinfo('foo', 'bar')
 
     def test_bad_field_number(self):
         with self.assertRaises(FieldError):
-            writer = Writer('test-data/delete.txt', overwrite=True)
-            writer.writerow([1,2,3,4])
+            with BinningWriter('test-data/binning-delete.txt', overwrite=True) as writer:
+                writer.writerow([99] * 20)
+
+        with self.assertRaises(FieldError):
+            with ProfileWriter('test-data/profile-delete.txt', overwrite=True) as writer:
+                writer.writerow([99] * 20)
