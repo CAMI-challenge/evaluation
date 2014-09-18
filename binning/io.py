@@ -27,6 +27,7 @@ Where {tab} represents a single tab character.
 
 """
 import os.path
+import sys
 import re
 
 # Global constants
@@ -54,6 +55,18 @@ class Writer(object):
     access to each subsequent data line, returned as a list of values.
     """
     __columns = ['SEQUENCEID', 'BINID', 'TAXID']
+
+    def __enter__(self):
+        """
+        Instantiate class within with statement.
+        """
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """
+        Exit method for use within with statement. Closes underlying file.
+        """
+        self.close()
 
     def __init__(self, filename, overwrite=False):
         """
@@ -86,11 +99,6 @@ class Writer(object):
             raise HeaderError('unknown header info field {0}'.format(key))
         self.header_info[key] = value
 
-    #
-    # Public methods for setting various header fields.
-    #
-    # version and task are not exposed to users.
-    #
     def set_contestantid(self, contestant):
         """
         Set the contestant id
@@ -123,10 +131,6 @@ class Writer(object):
         """
         self._set_headinfo(REPINFO_KEY, 'T')
 
-
-    #
-    # Write a line with implicit newline
-    #
     def _writeline(self, line):
         """
         Write a single line to the file
@@ -134,9 +138,6 @@ class Writer(object):
         """
         self.file_handle.write(line + '\n')
 
-    #
-    # Write the header record
-    #
     def _write_header(self):
         """
         Write the header to the file. This includes all the defined metadata.
@@ -146,9 +147,6 @@ class Writer(object):
             self._writeline('@{0}{1}{2}'.format(k, HEADER_SEP, v))
         self._writeline('@@{0}'.format(FIELD_SEP.join(Writer.__columns)))
 
-    #
-    # Write a single row
-    #
     def writerow(self, row):
         """
         Write a row of values to the file.
@@ -160,9 +158,6 @@ class Writer(object):
         self._writeline(FIELD_SEP.join(row))
         pass
 
-    #
-    # Close underlying file
-    #
     def close(self):
         """
         Close the underlying file
@@ -180,11 +175,9 @@ class Reader(object):
     """
 
     # define header fields which are mandatory
+    # TODO determine which fields in the header are mandatory beyond task and version
     __supports = {TASK_KEY: ['binning'], VERSION_KEY: ['1.0']}
 
-    #
-    # Test for a blank line
-    #
     @staticmethod
     def _is_blank(line):
         """
@@ -195,9 +188,6 @@ class Reader(object):
         """
         return re.match('^\s*$', line) is not None
 
-    #
-    # Test for a comment line
-    #
     @staticmethod
     def _is_comment(line):
         """
@@ -207,6 +197,12 @@ class Reader(object):
         :return: return True if the line is a comment (begins with #)
         """
         return line.startswith(COMMENT_CHAR)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
 
     def __init__(self, filename):
         """
@@ -232,9 +228,6 @@ class Reader(object):
         """
         return self
 
-    #
-    # Check if manadatory fields in header have been set.
-    #
     def _check_mandatory_set(self):
         """
         Check if the mandatory header fields have been included.
@@ -245,9 +238,6 @@ class Reader(object):
         if VERSION_KEY not in self.header_info:
             raise HeaderError('task type not declared')
 
-    #
-    # Read a line of the underlying file and increment line counter
-    #
     def _readline(self):
         """
         Read a line from the file.
@@ -257,10 +247,6 @@ class Reader(object):
         self.line_number += 1
         return line
 
-    #
-    # Parse the header lines and test-data that the reader supports
-    # the file type.
-    #
     def _header_parse(self, line):
         """
         Parse a line of the header
@@ -290,11 +276,6 @@ class Reader(object):
                 raise HeaderError('reader does not support the file type definition. line:{0} [{1}]'
                                   .format(self.line_number, line))
 
-    #
-    # Read the complete header, raise errors if malformed.
-    # After completion, the file point should sit at the beginning
-    # of actual data records.
-    #
     def _read_header(self):
         """
         Read the entire header and validate it.
@@ -322,18 +303,12 @@ class Reader(object):
         # Check that task and version are set within header
         self._check_mandatory_set()
 
-    #
-    # Close underlying input file
-    #
     def close(self):
         """
         Close the underlying file
         """
         self.file_handle.close()
 
-    #
-    # Read next line
-    #
     def next(self):
         """
         Iterator over data lines.
@@ -353,9 +328,6 @@ class Reader(object):
 
         return values
 
-    #
-    # Get header based information.
-    #
     def get_info(self, key):
         """
         Return parsed header information.
@@ -364,10 +336,15 @@ class Reader(object):
         """
         return self.header_info[key]
 
+    def print_headerinfo(self, handle=sys.stdout):
+        """
+        Print out the full dictionary of head info
+        :param handle: file handle which to print
+        """
+        for k, v in self.header_info.iteritems():
+            print >> handle, '{0}={1}'.format(k, v)
 
-#
-# Local exception classes
-#
+
 class BinningError(IOError):
     """
     Base error class
@@ -388,30 +365,31 @@ class HeaderError(BinningError):
     """
     pass
 
-#
-# Basic cli for testing
-#
-if __name__ == '__main__':
 
-    import sys
+if __name__ == '__main__':
+    """
+    Main loop used as a simple format validator. If no exception occurs,
+    the file is considered valid.
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(description='Format validator')
+    parser.add_argument('input_file', help='The file to validate')
+    args = parser.parse_args()
 
     try:
-        if len(sys.argv) != 3:
-            print 'usage: [input file] [output file]'
-            sys.exit(1)
-
-        reader = Reader(sys.argv[1])
-        print reader.columns
-        data_rows = []
-        for row in reader:
-            print row
-            data_rows.append(row)
-        reader.close()
-
-        writer = Writer(sys.argv[2])
-        for row in data_rows:
-            writer.writerow(row)
-        writer.close()
-
+        with Reader(args.input_file) as reader:
+                print 'Header information:'
+                reader.print_headerinfo(sys.stderr)
+                print
+                print 'Data fields:'
+                print >> sys.stderr, reader.columns
+                for nrow, row in enumerate(reader, start=1):
+                    print >> sys.stderr, row
+                print
+                print 'Read {0} data rows, check that this is correct.'.format(nrow)
+                print 'Validation finished without error.'
     except IOError as e:
-        print e
+        print 'There was an error during validation'
+        print 'Exception: {0}'.format(e)
+        sys.exit(1)
