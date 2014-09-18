@@ -1,10 +1,36 @@
 """
-CAMI IO
+Binning IO module
+
+This module intends to provide basic read and write of the CAMI Binning file format.
+
+The format consists of an informational header and a tab-delimited body.
+
+Line types:
+
+Comment lines.
+
+    # a comment
+
+Header lines, which carry metadata.
+
+    @foobar:123
+
+Column definition line.
+
+    @@SEQUENCEID{tab}TAXID{tab}BINID
+
+Data line.
+
+    read001{tab}123{tab}321
+
+Where {tab} represents a single tab character.
+
 """
 import os.path
 import re
 
 # Global constants
+HEADER_COMMENT = '#CAMI Format for Binning'
 COMMENT_CHAR = '#'
 HEADER_CHAR = '@'
 FIELD_SEP = '\t'
@@ -19,11 +45,23 @@ REFBASED_KEY = 'referencebased'
 ASMBASED_KEY = 'assemblybased'
 REPINFO_KEY = 'replicateinfo'
 
-class Writer(object):
 
+class Writer(object):
+    """
+    Writer
+
+    Opens a file on instantiation and validates header information. Provides iterator
+    access to each subsequent data line, returned as a list of values.
+    """
     __columns = ['SEQUENCEID', 'BINID', 'TAXID']
 
     def __init__(self, filename, overwrite=False):
+        """
+        Instatiate the Writer class for a given filename.
+        :param filename: the filename to write
+        :param overwrite: boolean flag for file overwriting
+        :raises: BinningError when output file already exists and overwrite is False
+        """
         self.header_info = {
             'task': 'binning',
             'version': 1.0,
@@ -38,10 +76,12 @@ class Writer(object):
         self.file_handle = open(filename, 'w')
         self._write_header()
 
-    #
-    # Helper function to set internal dictionary fields on header info
-    #
     def _set_headinfo(self, key, value):
+        """
+        Helper function to set internal dictionary fields on header info
+        :param key: header key to set
+        :param value: the value
+        """
         if key not in self.header_info:
             raise HeaderError('unknown header info field {0}'.format(key))
         self.header_info[key] = value
@@ -52,18 +92,35 @@ class Writer(object):
     # version and task are not exposed to users.
     #
     def set_contestantid(self, contestant):
+        """
+        Set the contestant id
+        :param contestant:
+        """
         self._set_headinfo(CONID_KEY, contestant)
 
     def set_sampleid(self, sample):
+        """
+        Set the sample id
+        :param sample:
+        """
         self._set_headinfo(SAMPLEID_KEY, sample)
 
     def set_reference_based(self):
+        """
+        Set reference based to true
+        """
         self._set_headinfo(REFBASED_KEY, 'T')
 
     def set_assembly_based(self):
+        """
+        Set assembly based to true
+        """
         self._set_headinfo(ASMBASED_KEY, 'T')
 
     def set_replicate_info(self):
+        """
+        Set replicate info to true
+        """
         self._set_headinfo(REPINFO_KEY, 'T')
 
 
@@ -71,13 +128,20 @@ class Writer(object):
     # Write a line with implicit newline
     #
     def _writeline(self, line):
+        """
+        Write a single line to the file
+        :param line: the line to write to the file
+        """
         self.file_handle.write(line + '\n')
 
     #
     # Write the header record
     #
     def _write_header(self):
-        self._writeline('#CAMI Format for Binning')
+        """
+        Write the header to the file. This includes all the defined metadata.
+        """
+        self._writeline(HEADER_COMMENT)
         for k, v in self.header_info.iteritems():
             self._writeline('@{0}{1}{2}'.format(k, HEADER_SEP, v))
         self._writeline('@@{0}'.format(FIELD_SEP.join(Writer.__columns)))
@@ -86,6 +150,11 @@ class Writer(object):
     # Write a single row
     #
     def writerow(self, row):
+        """
+        Write a row of values to the file.
+        :param row: the row of values, corresponding to the column order.
+        :raises FieldError when the number of fields does not agree with the defined number of columns
+        """
         if len(row) != len(Writer.__columns):
             raise FieldError('number of fields {0} does not agree with columns'.format(row, Writer.__columns))
         self._writeline(FIELD_SEP.join(row))
@@ -95,10 +164,20 @@ class Writer(object):
     # Close underlying file
     #
     def close(self):
+        """
+        Close the underlying file
+        """
         self.file_handle.close()
 
 
 class Reader(object):
+    """
+    Reader
+
+    Read from a given CAMI binning file. Provides an iterator over the data lines
+    where each row is returned as a list of values ordered by column definition.
+
+    """
 
     # define header fields which are mandatory
     __supports = {TASK_KEY: ['binning'], VERSION_KEY: ['1.0']}
@@ -108,6 +187,12 @@ class Reader(object):
     #
     @staticmethod
     def _is_blank(line):
+        """
+        Test if a line is blank
+
+        :param line: the line to check
+        :return: return True if line contains only white space
+        """
         return re.match('^\s*$', line) is not None
 
     #
@@ -115,9 +200,22 @@ class Reader(object):
     #
     @staticmethod
     def _is_comment(line):
+        """
+        Test if a line is a comment
+
+        :param line: the line to test
+        :return: return True if the line is a comment (begins with #)
+        """
         return line.startswith(COMMENT_CHAR)
 
     def __init__(self, filename):
+        """
+        Instantiate a Reader. The parser will open and read the header
+        as part of instantiation.
+
+        :param filename: the filename of the input file.
+        :return:
+        """
         self.line_number = 0
         self.version_value = None
         self.filename = filename
@@ -129,12 +227,19 @@ class Reader(object):
 
 
     def __iter__(self):
+        """
+        :return: return an iterator for the class
+        """
         return self
 
     #
     # Check if manadatory fields in header have been set.
     #
     def _check_mandatory_set(self):
+        """
+        Check if the mandatory header fields have been included.
+        :return: returns True if mandatory fields are found
+        """
         if TASK_KEY not in self.header_info:
             raise HeaderError('format version not declared')
         if VERSION_KEY not in self.header_info:
@@ -144,6 +249,10 @@ class Reader(object):
     # Read a line of the underlying file and increment line counter
     #
     def _readline(self):
+        """
+        Read a line from the file.
+        :return: return the line as a string, stripped.
+        """
         line = self.file_handle.next().strip()
         self.line_number += 1
         return line
@@ -153,6 +262,11 @@ class Reader(object):
     # the file type.
     #
     def _header_parse(self, line):
+        """
+        Parse a line of the header
+        :param line: the line to parse
+        :raises: HeaderError when a line is invalid given its context
+        """
 
         # header line is sufficiently long and potentially contains a key/value pair
         if len(line) < 4 or line.count(HEADER_SEP) != 1:
@@ -182,6 +296,10 @@ class Reader(object):
     # of actual data records.
     #
     def _read_header(self):
+        """
+        Read the entire header and validate it.
+        :raises: HeaderError when the header is truncated.
+        """
         while True:
             try:
                 line = self._readline()
@@ -208,12 +326,19 @@ class Reader(object):
     # Close underlying input file
     #
     def close(self):
+        """
+        Close the underlying file
+        """
         self.file_handle.close()
 
     #
     # Read next line
     #
     def next(self):
+        """
+        Iterator over data lines.
+        :return: the next row of values in the data table
+        """
         line = self._readline()
         if line is StopIteration:
             return StopIteration
@@ -232,6 +357,11 @@ class Reader(object):
     # Get header based information.
     #
     def get_info(self, key):
+        """
+        Return parsed header information.
+        :param key: the key to return
+        :return: value for the given key
+        """
         return self.header_info[key]
 
 
@@ -239,14 +369,23 @@ class Reader(object):
 # Local exception classes
 #
 class BinningError(IOError):
+    """
+    Base error class
+    """
     pass
 
 
 class FieldError(BinningError):
+    """
+    Data field errors
+    """
     pass
 
 
 class HeaderError(BinningError):
+    """
+    Header errors
+    """
     pass
 
 #
