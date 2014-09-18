@@ -450,29 +450,31 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Format validator')
     parser.add_argument('input_file', help='The file to validate')
+    parser.add_argument('--type', help='File type [binning, profile]', required=True, nargs=1)
     args = parser.parse_args()
 
     try:
-        with BinningReader(args.input_file) as reader:
-                print 'Header information:'
-                reader.print_headerinfo(sys.stderr)
-                print
-                print 'Data fields:'
-                print >> sys.stderr, reader.column_definition
-                mr = []
-                for nrow, row in enumerate(reader, start=1):
-                    print >> sys.stderr, row
-                    mr.append(row)
-                print
-                print 'Read {0} data rows, check that this is correct.'.format(nrow)
-                print 'Validation finished without error.'
+        reader_class = None
+        if args.type[0] == 'binning':
+            reader_class = BinningReader
+        elif args.type[0] == 'profile':
+            reader_class = ProfileReader
+        else:
+            raise RuntimeError('Unknown file type {0}'.format(args.type))
 
-                #
-                # DELETE THIS
-                #
-                with BinningWriter('junkme.out') as writer:
-                    for r in mr:
-                        writer.writerow(r)
+        with reader_class(args.input_file) as reader:
+                    print 'Header information:'
+                    reader.print_headerinfo(sys.stderr)
+                    print
+                    print 'Data fields:'
+                    print >> sys.stderr, reader.column_definition
+                    mr = []
+                    for nrow, row in enumerate(reader, start=1):
+                        print >> sys.stderr, row
+                        mr.append(row)
+                    print
+                    print 'Read {0} data rows, check that this is correct.'.format(nrow)
+                    print 'Validation finished without error.'
 
     except IOError as e:
         print 'There was an error during validation'
