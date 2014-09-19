@@ -420,6 +420,10 @@ class ProfileReader(Reader):
         super(ProfileReader, self).__init__(
             filename, PRO_TASK, PRO_VERSION_SUPPORT, PRO_MANDATORY_FIELDS, PRO_COLUMN_DEFINITION)
 
+#
+# Error types
+#
+
 class ParseError(IOError):
     """
     Base error class
@@ -439,44 +443,3 @@ class HeaderError(ParseError):
     Header errors
     """
     pass
-
-
-if __name__ == '__main__':
-    """
-    Main loop used as a simple format validator. If no exception occurs,
-    the file is considered valid.
-    """
-    import argparse
-
-    parser = argparse.ArgumentParser(description='Format validator')
-    parser.add_argument('input_file', help='The file to validate')
-    parser.add_argument('--type', help='File type [binning, profile]', required=True, nargs=1)
-    args = parser.parse_args()
-
-    try:
-        reader_class = None
-        if args.type[0] == 'binning':
-            reader_class = BinningReader
-        elif args.type[0] == 'profile':
-            reader_class = ProfileReader
-        else:
-            raise RuntimeError('Unknown file type {0}'.format(args.type))
-
-        with reader_class(args.input_file) as reader:
-                    print 'Header information:'
-                    reader.print_headerinfo(sys.stderr)
-                    print
-                    print 'Data fields:'
-                    print >> sys.stderr, reader.column_definition
-                    mr = []
-                    for nrow, row in enumerate(reader, start=1):
-                        print >> sys.stderr, row
-                        mr.append(row)
-                    print
-                    print 'Read {0} data rows, check that this is correct.'.format(nrow)
-                    print 'Validation finished without error.'
-
-    except IOError as e:
-        print 'There was an error during validation'
-        print 'Exception: {0}'.format(e)
-        sys.exit(1)
