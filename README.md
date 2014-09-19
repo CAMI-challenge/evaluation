@@ -1,4 +1,4 @@
 evaluation
 ==========
 
-Evaluation tools
+Evaluation tools and associated code used in the CAMI pipeline.
