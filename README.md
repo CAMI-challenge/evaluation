@@ -12,7 +12,7 @@ These tools are separated by evaluation type.
 ####File formats
 Apart from assembly which works from traditional assembly output formats, Binning and Profiling require result files to be in the [CAMI file formats](https://github.com/CAMI-challenge/contest_information/tree/master/file_formats).
 
-A validation tool (validator.py) has been provided, which end-users are encourage to use in testing their submissions for compliance.
+A validation tool (validator.py) has been provided, which end-users are encouraged to use in testing their submissions for compliance.
 
 Link to the repository where PhyloPythiaS+ evaluation scripts can be found:
 https://github.com/algbioi/ppsplus/tree/master/algbioi/eval
