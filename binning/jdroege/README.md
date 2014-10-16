@@ -16,7 +16,7 @@ A python library for taxonomy access.
 ### tax2racol.py
 A Python script which takes a tab-separated two-column file where the first columns contains the sequence ID and the second an NCBI taxon ID. The output will be in RACOL format where the first column is the sequence ID and the following columns stand for taxonomic ranks in ascending order and contain the taxon names. In addition to the input (provided as standard input), the script allows to specify for which ranks to generate columns and also requires the user to provide an NCBI taxonomy which must be in SQLite-BioSQL format. These files can be constructed from the raw NCBI taxonomy files (names.dmp, nodes.dmp) by a provided script (available very soon). If this seems a too complicated dependence, this script could easily be replaced by a more lightweight version.
 
-### fasta-seqlen
+### fasta-seqlen.awk
 This is an AWK script to calculate the length of FASTA sequence entries. The FASTA file is streamed via the standard input and the sequence ID and length are printed on the standard output. If piped to a file, this output is a proper weights file for the confusion_matrix.py script
 
 ### confusionmatrix.py
@@ -38,7 +38,7 @@ tax2racol.py -t taxonomy.sqlite -ranks genus,family,order < predictions.tax > pr
 
 ### Generate sequence weights file
 ```bash
-fasta-seqlen < predictions.fna > predictions.seqlen
+fasta-seqlen.awk < predictions.fna > predictions.seqlen
 ```
 
 ### Generate confusion matrices
